@@ -1,0 +1,36 @@
+Handlebars.registerHelper('truncate', function(str, len) {
+	if (str.length > len) {
+		var new_str = str.substr(0, len + 1);
+
+		while (new_str.length) {
+			var ch = new_str.substr(-1);
+			new_str = new_str.substr(0, -1);
+
+			if (ch == ' ') {
+				break;
+			}
+		}
+
+		if (new_str == '') {
+			new_str = str.substr(0, len);
+		}
+
+		return new Handlebars.SafeString(new_str + '...');
+	}
+	return str;
+});
+
+Handlebars.registerHelper('formatDateTime',
+		function(context) {
+			var date = new Date(context), day = date.getDate(), month = date
+					.getMonth() + 1, year = date.getFullYear(), hour = date
+					.getHours(), minute = date.getMinutes(), second = date
+					.getSeconds();
+			return year + "." + (month < 10 ? '0' : '') + month + "."
+					+ (day < 10 ? '0' : '') + day + " "
+					+ (hour < 10 ? '0' : '') + hour + ":"
+					+ (minute < 10 ? '0' : '') + minute + ":"
+					+ (second < 10 ? '0' : '') + second;
+		});
+
+HandlebarsIntl.registerWith(Handlebars);

@@ -1,0 +1,185 @@
+AUI().ready(
+	'cookie', 'liferay-hudcrumbs', 'liferay-navigation-interaction', 'liferay-sign-in-modal',
+	/*
+	This function gets loaded when all the HTML, not including the portlets, is
+	loaded.
+	*/
+
+	function(A) {
+		var navigation = A.one('#navigation');
+
+		if (navigation) {
+			navigation.plug(Liferay.NavigationInteraction);
+		}
+
+		A.on('click', function(e) {
+			e.currentTarget.toggleClass('open', true);
+		}, '#navigation .dropdown');
+		A.on('clickoutside', function(e) {
+			e.currentTarget.toggleClass('open', false);
+		}, '#navigation .dropdown');
+		
+		A.on('click', function(e) {
+			var theMenu = A.one('#header-controls');
+			if (theMenu) {
+				theMenu.toggleClass('menu_open');
+			}
+		}, '#hamburgerGomb');
+		
+		var siteBreadcrumbs = A.one('#breadcrumbs');
+
+		if (siteBreadcrumbs) {
+			siteBreadcrumbs.plug(A.Hudcrumbs);
+		}
+
+		var signIn = A.one('li.sign-in a');
+
+		if (signIn && signIn.getData('redirect') !== 'true') {
+			signIn.plug(Liferay.SignInModal);
+		}
+		
+		var accessibleLink = A.one('span.psight');
+			if (accessibleLink) {
+				var body = A.one('body');
+				if (body.hasClass('partially-sighted')) {
+        	accessibleLink.setContent('\u004e\u006f\u0072\u006d\u00e1\u006c\u0020\u0076\u0065\u0072\u007a\u0069\u00f3');
+        	accessibleLink.attr('title','Normál verzió');
+        } else {
+        	accessibleLink.setContent('');
+        	accessibleLink.attr('title','Gyengénlátó verzió');
+        }
+				accessibleLink.on('click', function(event) {
+					var partiallySighted = body.hasClass('partially-sighted');
+					A.Cookie.set('ehealth_partially_sighted', !partiallySighted, { path: '/', secure: A.UA.secure });
+					body.toggleClass('partially-sighted');
+            if (!partiallySighted) {
+            	accessibleLink.setContent('\u004e\u006f\u0072\u006d\u00e1\u006c\u0020\u0076\u0065\u0072\u007a\u0069\u00f3');
+            	accessibleLink.attr('title','Normál verzió');
+            } else {
+            	accessibleLink.setContent('');
+            	accessibleLink.attr('title','Gyengénlátó verzió');
+            }
+			  });
+		  }
+		
+		if ('false' !== A.Cookie.get('szechenyi_opened')) {
+			A.all('#szechenyi-toggle, #szechenyi').removeClass('closed');
+		}
+			
+		A.on('click', function(e) {
+			A.Cookie.set('szechenyi_opened', A.one('#szechenyi-toggle').hasClass('closed'), { path: '/', secure: A.UA.secure });
+			A.all('#szechenyi-toggle, #szechenyi').toggleClass('closed');
+		}, '#szechenyi-toggle, #szechenyi');
+	}
+);
+
+Liferay.Portlet.ready(
+
+	/*
+	This function gets loaded after each and every portlet on the page.
+
+	portletId: the current portlet's id
+	node: the Alloy Node object of the current portlet
+	*/
+
+	function(portletId, node) {
+	}
+);
+
+Liferay.on(
+	'allPortletsReady',
+
+	/*
+	This function gets loaded when everything, including the portlets, is on
+	the page.
+	*/
+
+	function() {
+	}
+);
+
+function toggleDetail(detailId, buttonId) {
+	var detail = document.getElementById(detailId);
+	var buttonCaret = document.getElementById(buttonId).getElementsByTagName(
+			'i')[0];
+	if ("block" === detail.style.display) {
+		detail.style.display = "none";
+		buttonCaret.className = "fa fa-caret-down";
+	} else {
+		detail.style.display = "block";
+		buttonCaret.className = "fa fa-caret-up";
+	}
+}
+
+function toggleHelpDetail(detailId) {
+	var detail = document.getElementById(detailId);
+
+	if ("block" === detail.style.display) {
+		detail.style.display = "none";
+	} else {
+		detail.style.display = "block";
+	}
+}
+
+function onHarmonicElementClick(element) {
+	var parent = element.parentElement;
+	if(parent.className.search("eeszt-harmonic-list-open") == -1) {
+		parent.className = parent.className.replace("eeszt-harmonic-list-close", "eeszt-harmonic-list-open");
+		getChildElementByClassName(parent.childNodes, "eeszt-harmonic-list-content").style.display = "block";
+		for (var i = 0; i < parent.children.length; i++) {
+			if(parent.children[i].tagName.toLowerCase() == "h2") {
+				for(var j = 0; j < parent.children[i].children.length; j++) {
+					if(parent.children[i].children[j].className.search("eeszt-harmonic-list-icon-close") != -1) {
+						parent.children[i].children[j].style.display = "inline-block";
+					}
+					if(parent.children[i].children[j].className.search("eeszt-harmonic-list-icon-open") != -1) {
+						parent.children[i].children[j].style.display = "none";
+					}
+				}
+			}
+		}	
+	}
+	else {
+		parent.className = parent.className.replace("eeszt-harmonic-list-open", "eeszt-harmonic-list-close");
+		getChildElementByClassName(parent.childNodes, "eeszt-harmonic-list-content").style.display = "none";
+		for (var i = 0; i < parent.children.length; i++) {
+			if(parent.children[i].tagName.toLowerCase() == "h2") {
+				for(var j = 0; j < parent.children[i].children.length; j++) {
+					if(parent.children[i].children[j].className.search("eeszt-harmonic-list-icon-close") != -1) {
+						parent.children[i].children[j].style.display = "none";
+					}
+					if(parent.children[i].children[j].className.search("eeszt-harmonic-list-icon-open") != -1) {
+						parent.children[i].children[j].style.display = "inline-block";
+					}
+				}
+			}
+		}	
+	}
+}
+
+function getChildElementByClassName(childNodes, className) {
+	for (var i = 0; i < childNodes.length; i++) {
+		if(childNodes[i].className == className) {
+			return childNodes[i];
+		}
+	}
+}
+
+function openSearchDetail(tableId, openTagId, closeTagId) {
+	document.getElementById(tableId.id).style.display = "table-row";
+	document.getElementById(openTagId.id).style.display = "none";	
+	document.getElementById(closeTagId.id).style.display = "block";
+}
+
+function closeSearchDetail(tableId, openTagId, closeTagId) {
+	document.getElementById(tableId.id).style.display = "none";
+	document.getElementById(openTagId.id).style.display = "block";	
+	document.getElementById(closeTagId.id).style.display = "none";
+}
+
+function scrollIntoView(id, block) {
+	var target = document.getElementById(id);
+	if(target !== null) {
+		target.scrollIntoView({block: block, behavior: 'smooth'});
+	}
+}

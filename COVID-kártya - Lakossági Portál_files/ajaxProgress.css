@@ -1,0 +1,6 @@
+.divAjaxProgress {
+	position:fixed;
+	top: calc(50% - 26px);
+	left: calc(50% - 26px);
+	z-index: 999;
+}

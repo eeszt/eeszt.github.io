@@ -1,0 +1,334 @@
+/**
+ * Wire signals of a t:pager, a t:ajaxContext and a t:handlebars
+ * 
+ * @param pagerId
+ * @param contextId
+ */
+
+function wireTable(namespace, pagerId, contextId, handlebarsId, messageContainerId, tableContainerId, failSafeMessageContainerId) {
+	
+	if (!messageContainerId) {
+		messageContainerId = 'ajaxErrorMessages';
+	}
+	
+	AUI().use(
+			'component-bus',
+			function(A) {
+				var bus = A.ComponentBus;
+				var pager = bus.getComponent(pagerId);
+				var context = bus.getComponent(contextId);
+				var handlebars = bus.getComponent(handlebarsId);
+
+				pager.signals['changed'].add(function(e) {
+					context.obj.setParam(namespace + 'PAGE_NUMBER', pager.obj.actualPage);
+					if (context.obj.data && context.obj.data.actualPage != pager.obj.actualPage) {
+						context.obj.call();
+					}
+				});
+				
+				context.signals['successed'].add(function(e) {
+					var dataListLength = context.obj.data.dataList.length;
+
+					if (tableContainerId && failSafeMessageContainerId) { 
+						var tableContainer = bus.getComponent(tableContainerId);
+						var failSafeMessageContainer = bus.getComponent(failSafeMessageContainerId);
+
+						if (dataListLength == 0) {
+							tableContainer.obj.hide();
+							failSafeMessageContainer.obj.show();
+						} else {
+							tableContainer.obj.show();
+							failSafeMessageContainer.obj.hide();
+						}
+					}
+
+					pager.obj.setActualPage(context.obj.data.actualPage);
+					pager.obj.setTotal(context.obj.data.totalPages);
+					handlebars.obj.setContext(context.obj.data);
+				});
+
+				context.signals['started'].add(function(e) {
+					var div = A.one('#' + namespace + messageContainerId);
+					div._node.style.display = 'none';
+					div.html('');
+				});
+
+				context.signals['failed'].add(function(e) {
+					var data = context.obj.data;
+					if (data != undefined && data['class'] && data['class'] === 'hu.eeszt.pro.exception.EESZTException') {
+						if (data.errorMessages && data.errorMessages.length > 0) {
+							var text = '';
+							for (var i = 0; i < data.errorMessages.length; ++i) {
+								if (i > 0) {
+									text += '<br />';
+								}
+								text += '<div class="alert alert-error">' + data.errorMessages[i].errorCode + ' - '
+										+ data.errorMessages[i].errorMessage + '</div>';
+							}
+						}
+						var div = A.one('#' + namespace + messageContainerId);
+						div._node.style.display = 'block';
+						div.html(text);
+					}
+				});
+			});
+}
+
+/**
+ * @param contextId
+ * @param messageContainer
+ */
+function wireMessagesComponent(namespace, contextId, messageContainerId) {
+
+	if (!messageContainerId) {
+		messageContainerId = 'ajaxErrorMessages';
+	}
+
+	var liferayErrorNoticeMessageContainerId = 'liferay-error-notice-'
+			+ messageContainerId;
+
+	AUI().use(
+			'component-bus',
+			function(A) {
+
+				var bus = A.ComponentBus;
+				var context = bus.getComponent(contextId);
+
+				context.signals['started'].add(function(e) {
+					var div = A.one('#' + namespace + messageContainerId);
+					div.html('');
+					A.one('#' + liferayErrorNoticeMessageContainerId).hide();
+				});
+
+				context.signals['failed'].add(function(e) {
+
+					var data = context.obj.data;
+
+					if (data == undefined) {
+						return;
+					}
+
+					clazzName = data['class'];
+
+					if (clazzName === 'hu.eeszt.pro.exception.EESZTException') {
+
+						if (data.errorMessages && data.errorMessages.length > 0) {
+							var text = '';
+							for (var i = 0; i < data.errorMessages.length; ++i) {
+								if (i > 0) {
+									text += '<br />';
+								}
+								text += '<div>' + data.errorMessages[i].errorCode + ' - '
+										+ data.errorMessages[i].errorMessage + '</div>';
+							}
+						}
+						var div = A.one('#' + namespace + messageContainerId);
+						div.html(text);
+						A.one('#'+ liferayErrorNoticeMessageContainerId).show();
+
+					} else if (clazzName === 'java.lang.Exception') {
+
+						var text = '<div>' + data.message + '</div>';
+						var div = A.one('#' + namespace + messageContainerId);
+						div.html(text);
+						A.one('#'+ liferayErrorNoticeMessageContainerId).show();
+					}
+				});
+			});
+}
+
+/**
+ * @param contextId
+ * @param messageContainer
+ */
+function wireMessagesSuccessComponent(namespace, contextId, messageContainerId, successMessage) {
+
+	AUI().use(
+			'component-bus',
+			function(A) {
+
+				var bus = A.ComponentBus;
+				var context = bus.getComponent(contextId);
+
+				context.signals['successed'].add(function(e) {
+					var text = successMessage;
+					
+					if(typeof text === "undefined") {
+						text = "Sikeres művelet."
+					}
+					
+					if (text !== '') {
+						msgBox = document.getElementById('liferay-success-notice-ajaxMessages');
+						msg = document.getElementById(namespace + messageContainerId);
+						msgBox.classList.remove("hide");
+						msgBox.style = "display:table-row";
+						msgBox.hidden = false;
+						msg.innerHTML = text;
+					}
+				});
+			});
+}
+
+/**
+ * @param namespace
+ * @param contextId
+ * @param messageContainer
+ */
+function wireWarningMessagesComponent(namespace, contextId, messageContainerId) {
+
+	AUI().use(
+			'component-bus',
+			function(A) {
+
+				var bus = A.ComponentBus;
+				var context = bus.getComponent(contextId);
+
+				context.signals['started'].add(function(e) {
+					var div = A.one('#' + namespace + messageContainerId);
+					div._node.style.display = 'none';
+					div.html('');
+				});
+
+				context.signals['successed'].add(function(e) {
+
+					var data = context.obj.data;
+
+					if (data == undefined) {
+						return;
+					}
+
+					var warning = data['warning'];
+
+					if (warning != undefined) {
+
+						var text = '<div class="alert alert-warn">' + warning + '</div>';
+						var div = A.one('#' + namespace + messageContainerId);
+						div._node.style.display = 'block';
+						div.html(text);
+					}
+					
+				});
+			});
+}
+
+function clearAjaxMessages(namespace) {
+	try { 		
+		msgBox = document.getElementById('liferay-success-notice-ajaxMessages');
+		msg = document.getElementById(namespace + 'successMessages');
+		msgBox.classList.add("hide");		
+		msgBox.hidden = true;
+		msg.innerHTML = '';
+		
+		msgBox = document.getElementById('liferay-error-notice-ajaxErrorMessages');
+		msg = document.getElementById(namespace + 'ajaxErrorMessages');
+		msgBox.classList.add("hide");		
+		msgBox.hidden = true;
+		msg.innerHTML = '';		
+	} catch (e) {
+		console.error(e);		
+	}	
+}
+
+/**
+ * This method calls the listed t:handlebars by ids with empty setContext.
+ * 
+ * @param namespace
+ * @param handlebarsIds
+ */
+function initHandlebars(namespace, handlebarsIds) {
+	AUI().use(
+			'component-bus',
+			function(A) {
+				var bus = A.ComponentBus;
+				
+				for(var i = 0; i < handlebarsIds.length; i++) {
+					var currentComponent = bus.getComponent(handlebarsIds[i]);
+					
+					if(undefined !== currentComponent) {
+						currentComponent.obj.setContext("");
+					}
+				}
+			});
+}
+
+function openDetail(element, id) {
+	if(document.getElementById(id).style.display.search("block") == -1) {	
+		document.getElementById(id).style.display = "block";
+		element.children[0].style.display = "none";
+		element.children[1].style.display = "inline-block";
+	} else {
+		document.getElementById(id).style.display = "none";
+		element.children[0].style.display = "inline-block";
+		element.children[1].style.display = "none";
+	}
+}
+
+function closeDetail(element, id) {
+	document.getElementById(id).style.display = "none";
+	element.children[0].style.display = "inline-block";
+	element.children[1].style.display = "none";
+}
+
+function openWindowWithPostWithAutoClose(url, params) {
+	openWindowWithPostInner(url, params, true);
+}
+
+function openWindowWithPostWithoutAutoClose(url, params) {
+	openWindowWithPostInner(url, params, false);
+}
+
+function openWindowWithPostInner(url, params, autoClose) {
+	var winName='PrintWindow';
+	var winURL=url;
+	var windowoption='resizable=yes,height=768,width=1024,location=0,menubar=1,scrollbars=1,toolbar=1';
+	var form = document.createElement("form");
+	form.setAttribute("method", "post");
+	form.setAttribute("action", winURL);
+	if (!autoClose) {
+		form.setAttribute("target",winName);		
+	}
+	for (var i in params) {
+		if (params.hasOwnProperty(i)) {
+			var input = document.createElement('input');
+			input.type = 'hidden';
+			input.name = i;
+			input.value = params[i];
+			form.appendChild(input);
+		}
+	}
+	document.body.appendChild(form);
+	window.setTimeout(function() {
+		var thisWindow = window.open('', winName, windowoption);
+		if (autoClose) {
+			form.target = "_blank";			
+		} else {
+			form.target = winName;
+		}
+		form.submit();
+		document.body.removeChild(form);
+		if (autoClose) {
+			thisWindow.close();
+		}
+	}, 100);
+}
+
+/**
+ * Convert timestamp to readable format. If the Date is null then return empty string.
+ * 
+ * @param data -
+ *            the current data.
+ */
+Handlebars.registerHelper('hungarianFormatDateTime', function(data) {
+
+        var date = new Date(data);
+        var day = date.getDate();
+        var month = date.getMonth()+1;
+        var year = date.getFullYear();
+        
+        var hour = date.getHours();
+        var min = date.getMinutes()
+        var sec = date.getSeconds();
+
+        // with padding
+        return (data == null) ? "" : year + "." + ("00" + month).slice(-2) + "." + ("00" + day).slice(-2) + ". " + ("00" + hour).slice(-2) + ":" + ("00" + min).slice(-2) + ":" + ("00" + sec).slice(-2);
+});

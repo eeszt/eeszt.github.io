@@ -1,0 +1,59 @@
+.tagcloudList {
+	margin: 0;
+	padding: 0;
+	list-style: none;
+}
+
+.tagcloudList .tagcloudList-itemgroup {
+	display: inline-block;
+	margin: 0 .3em .3em 0;
+	padding: 0;
+}
+
+.tagcloudList .tagcloudList-item {
+    display: inline-block;
+    height: 28px;
+    line-height: 28px;
+    background-color: #fff;
+    border: 1px solid #aaa;
+    border-radius: 3px;
+    white-space: nowrap;
+    text-overflow: ellipsis;
+    overflow: hidden;
+    color: #333;
+    font-size: 13px;
+    text-decoration: none;
+    -webkit-transition: .2s;
+    transition: .2s;
+    padding-right: 1em;
+}
+
+.tagcloudList .tagcloudList-item button {
+    border: 0;
+    line-height: normal;
+    padding: 6px 10px 6px 10px;
+    margin: 0;
+    color: red;
+    margin-right: 1px;
+    border-color: white;
+}
+
+.aui .tagcloudList .tagcloudList-item button:hover {
+    color: white;
+    background-color: red;
+}
+
+.tagcloud-tag {
+    padding: 0 0 10px 0;
+    border-radius: 4px;
+    border-color: rgb(221, 221, 221);
+    border-top: 0px;
+}
+
+.aui .tagcloud-tag input[type="text"] {
+    width: 100%;
+}
+
+.tagcloudList .tagcloudList-item .btnTagcloudItemTorles {
+	float: left;
+}

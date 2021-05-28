@@ -1,0 +1,1372 @@
+AUI.add(
+	'liferay-hudcrumbs',
+	function(A) {
+		var Lang = A.Lang,
+
+			getClassName = A.ClassNameManager.getClassName,
+
+			NAME = 'hudcrumbs';
+
+		var Hudcrumbs = A.Component.create(
+			{
+				ATTRS: {
+					clone: {
+						value: null
+					},
+					hostMidpoint: {
+						value: 0
+					},
+					top: {
+						value: 0
+					},
+					width: {
+						value: 0
+					}
+				},
+
+				EXTENDS: A.Plugin.Base,
+
+				NAME: NAME,
+
+				NS: NAME,
+
+				prototype: {
+					initializer: function() {
+						var instance = this;
+
+						var breadcrumbs = instance.get('host');
+						var hudcrumbs = breadcrumbs.clone();
+						var region = breadcrumbs.get('region');
+
+						hudcrumbs.resetId();
+
+						var win = A.getWin();
+						var body = A.getBody();
+
+						instance._win = win;
+						instance._body = body;
+						instance._dockbar = Liferay.Dockbar && Liferay.Dockbar.dockBar;
+
+						hudcrumbs.hide();
+
+						hudcrumbs.addClass('lfr-hudcrumbs');
+
+						instance.set('clone', hudcrumbs);
+
+						instance._calculateDimensions();
+
+						win.on('scroll', instance._onScroll, instance);
+						win.on('resize', instance._calculateDimensions, instance);
+
+						body.append(hudcrumbs);
+
+						Liferay.on('dockbar:pinned', instance._calculateDimensions, instance);
+					},
+
+					_calculateDimensions: function(event) {
+						var instance = this;
+
+						var region = instance.get('host').get('region');
+
+						instance.get('clone').setStyles(
+							{
+								left: region.left + 'px',
+								width: region.width + 'px'
+							}
+						);
+
+						instance.set('hostMidpoint', region.top + (region.height / 2));
+					},
+
+					_onScroll: function(event) {
+						var instance = this;
+
+						var scrollTop = event.currentTarget.get('scrollTop');
+						var hudcrumbs = instance.get('clone');
+
+						var action = 'hide';
+
+						if (scrollTop >= instance.get('hostMidpoint')) {
+							action = 'show';
+						}
+
+						if (instance.lastAction != action) {
+							hudcrumbs[action]();
+						}
+
+						instance.lastAction = action;
+					}
+				}
+			}
+		);
+
+		A.Hudcrumbs = Hudcrumbs;
+	},
+	'',
+	{
+		requires: ['aui-base', 'aui-component', 'plugin']
+	}
+);AUI.add(
+	'liferay-navigation-interaction',
+	function(A) {
+		var ACTIVE_DESCENDANT = 'activeDescendant';
+
+		var DIRECTION_LEFT = 0;
+
+		var DIRECTION_RIGHT = 1;
+
+		var NAME = 'liferaynavigationinteraction';
+
+		var NavigationInteraction = A.Component.create(
+			{
+				EXTENDS: A.Plugin.Base,
+
+				NAME: NAME,
+
+				NS: NAME,
+
+				prototype: {
+					MAP_HOVER: {},
+
+					initializer: function(config) {
+						var instance = this;
+
+						var host = instance.get('host');
+
+						var navigation = host.one('ul');
+
+						var hostULId = '#' + navigation.guid();
+
+						instance._directChildLi = hostULId + '> li';
+						instance._hostULId = hostULId;
+
+						Liferay.on(
+							['hideNavigationMenu', 'showNavigationMenu'],
+							function(event) {
+								var showMenu = (event.type == 'showNavigationMenu');
+
+								var menu = event.menu;
+
+								instance._lastShownMenu = null;
+
+								if (showMenu) {
+									instance._lastShownMenu = menu;
+								}
+
+								event.menu.toggleClass('hover', showMenu);
+								event.menu.toggleClass('open', showMenu);
+							}
+						);
+
+						instance._initChildMenuHandlers(navigation);
+
+						instance._initNodeFocusManager();
+					},
+
+					_handleExit: function(event) {
+						var instance = this;
+
+						var focusManager = instance._focusManager;
+
+						if (focusManager.get(ACTIVE_DESCENDANT)) {
+							focusManager.set(ACTIVE_DESCENDANT, 0);
+
+							focusManager.blur();
+						}
+
+						instance._hideMenu();
+					},
+
+					_handleKey: function(event, direction) {
+						var instance = this;
+
+						var item;
+
+						var target = event.target;
+
+						var parent = target.ancestors(instance._directChildLi).item(0);
+
+						var fallbackFirst = true;
+
+						if (direction == DIRECTION_LEFT) {
+							item = parent.previous();
+
+							fallbackFirst = false;
+						}
+						else {
+							item = parent.next();
+						}
+
+						if (!item) {
+							var siblings = parent.siblings();
+
+							if (fallbackFirst) {
+								item = siblings.first();
+							}
+							else {
+								item = siblings.last();
+							}
+						}
+
+						instance._focusManager.focus(item.one('a'));
+					},
+
+					_handleKeyDown: function(event) {
+						var instance = this;
+
+						var handler;
+
+						if (event.isKey('LEFT')) {
+							handler = '_handleLeft';
+						}
+						else if (event.isKey('RIGHT')) {
+							handler = '_handleRight';
+						}
+						else if (event.isKey('TAB') || event.isKey('ESC')) {
+							handler = '_handleExit';
+						}
+
+						if (handler) {
+							instance[handler](event);
+						}
+					},
+
+					_handleLeft: function(event) {
+						var instance = this;
+
+						instance._handleKey(event, DIRECTION_LEFT);
+					},
+
+					_handleRight: function(event) {
+						var instance = this;
+
+						instance._handleKey(event, DIRECTION_RIGHT);
+					},
+
+					_handleShowNavigationMenu: function(menuNew, menuOld, event) {
+						var instance = this;
+
+						if (!(instance._lastShownMenu &&
+							event.type.indexOf('focusedChange') > -1)) {
+
+							var mapHover = instance.MAP_HOVER;
+
+							var menuOldDistinct = (menuOld && (menuOld != menuNew));
+
+							if (menuOldDistinct) {
+								Liferay.fire('hideNavigationMenu', mapHover);
+							}
+
+							if (!menuOld || menuOldDistinct) {
+								mapHover.menu = menuNew;
+
+								Liferay.fire('showNavigationMenu', mapHover);
+							}
+						}
+					},
+
+					_hideMenu: function() {
+						var instance = this;
+
+						var mapHover = instance.MAP_HOVER;
+
+						if (mapHover.menu) {
+							Liferay.fire('hideNavigationMenu', mapHover);
+
+							instance.MAP_HOVER = {};
+						}
+					},
+
+					_initChildMenuHandlers: function(navigation) {
+						var instance = this;
+
+						if (navigation) {
+							navigation.delegate(['mouseenter', 'mouseleave'], instance._onMouseToggle, '> li', instance);
+
+							navigation.delegate('keydown', instance._handleKeyDown, 'a', instance);
+						}
+					},
+
+					_initNodeFocusManager: function() {
+						var instance = this;
+
+						var host = instance.get('host');
+
+						host.plug(
+							A.Plugin.NodeFocusManager,
+							{
+								descendants: 'a',
+								focusClass: 'active',
+								keys: {
+									next: 'down:40',
+									previous: 'down:38'
+								}
+							}
+						);
+
+						var focusManager = host.focusManager;
+
+						focusManager.after(['activeDescendantChange', 'focusedChange'], instance._showMenu, instance);
+
+						instance._focusManager = focusManager;
+					},
+
+					_onMouseToggle: function(event) {
+						var instance = this;
+
+						var mapHover = instance.MAP_HOVER;
+
+						var eventType = 'hideNavigationMenu';
+
+						if (event.type == 'mouseenter') {
+							eventType = 'showNavigationMenu';
+						}
+
+						mapHover.menu = event.currentTarget;
+
+						Liferay.fire(eventType, mapHover);
+					},
+
+					_showMenu: function(event) {
+						var instance = this;
+
+						event.halt();
+
+						var mapHover = instance.MAP_HOVER;
+
+						var menuOld = mapHover.menu;
+
+						var newMenuIndex = event.newVal;
+
+						var handleMenuToggle = (newMenuIndex || (newMenuIndex === 0));
+
+						if (handleMenuToggle) {
+							var focusManager = instance._focusManager;
+
+							var activeDescendant = focusManager.get(ACTIVE_DESCENDANT);
+							var descendants = focusManager.get('descendants');
+
+							var menuLink = descendants.item(activeDescendant);
+
+							var menuNew = menuLink.ancestor(instance._directChildLi);
+
+							instance._handleShowNavigationMenu(menuNew, menuOld, event);
+						}
+						else if (menuOld) {
+							Liferay.fire('hideNavigationMenu', mapHover);
+
+							instance.MAP_HOVER = {};
+						}
+					}
+				}
+			}
+		);
+
+		Liferay.NavigationInteraction = NavigationInteraction;
+	},
+	'',
+	{
+		requires: ['node-focusmanager', 'plugin']
+	}
+);YUI.add("aui-parse-content",function(e,t){var n=e.Lang,r=n.isString,i=e.config.doc,s="<div>_</div>",o={"":1,"text/javascript":1,"text/parsed":1},u=e.Component.create({NAME:"ParseContent",NS:"ParseContent",ATTRS:{queue:{value:null},preserveScriptNodes:{validator:n.isBoolean,value:!1}},EXTENDS:e.Plugin.Base,prototype:{initializer:function(){var t=this;u.superclass.initializer.apply(this,arguments),t.set("queue",new e.AsyncQueue),t._bindAOP()},globalEval:function(t){var r=e.getDoc(),s=r.one("head")||r.get("documentElement"),o=i.createElement("script");o.type="text/javascript",t&&(o.text=n.trim(t)),s.appendChild(o).remove()},parseContent:function(e){var t=this,n=t._extractScripts(e);return t._dispatch(n),n},_addInlineScript:function(e){var t=this;t.get("queue").add({args:e,context:t,fn:t.globalEval,timeout:0})},_bindAOP:function(){var t=this,n=function(n){var r=Array.prototype.slice.call(arguments),i=t.parseContent(n);return r.splice(0,1,i.fragment),new e.Do.AlterArgs(null,r)};this.doBefore("insert",n),this.doBefore("replaceChild",n);var r=function(n){var r=t.parseContent(n);return new e.Do.AlterArgs(null,[r.fragment])};this.doBefore("replace",r),this.doBefore("setContent",r)},_extractScripts:function(t){var n=this,i=e.Node.create("<div></div>"),u={},a=n.get("preserveScriptNodes");return r(t)?(t=s+t,e.DOM.addHTML(i,t,"append")):(i.append(s),i.append(t)),u.js=i.all("script").filter(function(e){var t=o[e.getAttribute("type").toLowerCase()];return a&&e.setAttribute("type","text/parsed"),t}),a||u.js.each(function(e){e.remove()}),i.get("firstChild").remove(),u.fragment=i.get("childNodes").toFrag(),u},_dispatch:function(t){var n=this,r=n.get("queue"),i=[];t.js.each(function(t){var s=t.get("src");if(s)i.length&&(n._addInlineScript(i.join(";")),i.length=0),r.add({autoContinue:!1,fn:function(){e.Get.script(s,{onEnd:function(e){e.purge(),r.run()}})},timeout:0});else{var o=t._node;i.push(o.text||o.textContent||o.innerHTML||"")}}),i.length&&n._addInlineScript(i.join(";")),r.run()}}});e.namespace("Plugin").ParseContent=u},"2.0.0",{requires:["async-queue","plugin","io-base","aui-component","aui-node-base"]});AUI.add(
+	'liferay-portlet-url',
+	function(A) {
+		var Lang = A.Lang;
+
+		var Util = Liferay.Util;
+
+		var PortletURL = function(lifecycle, params, basePortletURL) {
+			var instance = this;
+
+			instance.params = {};
+
+			instance.reservedParams = {
+				controlPanelCategory: null,
+				doAsGroupId: null,
+				doAsUserId: null,
+				doAsUserLanguageId: null,
+				p_auth: null,
+				p_auth_secret: null,
+				p_f_id: null,
+				p_j_a_id: null,
+				p_l_id: null,
+				p_l_reset: null,
+				p_p_auth: null,
+				p_p_cacheability: null,
+				p_p_col_count: null,
+				p_p_col_id: null,
+				p_p_col_pos: null,
+				p_p_i_id: null,
+				p_p_id: null,
+				p_p_isolated: null,
+				p_p_lifecycle: null,
+				p_p_mode: null,
+				p_p_resource_id: null,
+				p_p_state: null,
+				p_p_state_rcv: null,
+				p_p_static: null,
+				p_p_url_type: null,
+				p_p_width: null,
+				p_t_lifecycle: null,
+				p_v_l_s_g_id: null,
+				refererGroupId: null,
+				refererPlid: null,
+				saveLastPath: null,
+				scroll: null
+			};
+
+			instance.options = {
+				basePortletURL: basePortletURL,
+				escapeXML: null,
+				secure: null
+			};
+
+			if (!basePortletURL) {
+				instance.options.basePortletURL = themeDisplay.getPathMain() + '/portal/layout?p_l_id=' + themeDisplay.getPlid();
+			}
+
+			A.each(
+				params,
+				function(item, index, collection) {
+					if (Lang.isValue(item)) {
+						if (instance._isReservedParam(index)) {
+							instance.reservedParams[index] = item;
+						}
+						else {
+							instance.params[index] = item;
+						}
+					}
+				}
+			);
+
+			if (lifecycle) {
+				instance.setLifecycle(lifecycle);
+			}
+		};
+
+		PortletURL.prototype = {
+			/*
+			 * @deprecated
+			 */
+			setCopyCurrentRenderParameters: function() {
+				var instance = this;
+
+				return instance;
+			},
+
+			setDoAsGroupId: function(doAsGroupId) {
+				var instance = this;
+
+				instance.reservedParams.doAsGroupId = doAsGroupId;
+
+				return instance;
+			},
+
+			setDoAsUserId: function(doAsUserId) {
+				var instance = this;
+
+				instance.reservedParams.doAsUserId = doAsUserId;
+
+				return instance;
+			},
+
+			/*
+			 * @deprecated
+			 */
+			setEncrypt: function() {
+				var instance = this;
+
+				return instance;
+			},
+
+			setEscapeXML: function(escapeXML) {
+				var instance = this;
+
+				instance.options.escapeXML = escapeXML;
+
+				return instance;
+			},
+
+			setLifecycle: function(lifecycle) {
+				var instance = this;
+
+				var reservedParams = instance.reservedParams;
+
+				if (lifecycle === PortletURL.ACTION_PHASE) {
+					reservedParams.p_p_lifecycle = PortletURL.ACTION_PHASE;
+				}
+				else if (lifecycle === PortletURL.RENDER_PHASE) {
+					reservedParams.p_p_lifecycle = PortletURL.RENDER_PHASE;
+				}
+				else if (lifecycle === PortletURL.RESOURCE_PHASE) {
+					reservedParams.p_p_lifecycle = PortletURL.RESOURCE_PHASE;
+					reservedParams.p_p_cacheability = 'cacheLevelPage';
+				}
+
+				return instance;
+			},
+
+			setName: function(name) {
+				var instance = this;
+
+				instance.setParameter('javax.portlet.action', name);
+
+				return instance;
+			},
+
+			setParameter: function(key, value) {
+				var instance = this;
+
+				if (instance._isReservedParam(key)) {
+					instance.reservedParams[key] = value;
+				}
+				else {
+					instance.params[key] = value;
+				}
+
+				return instance;
+			},
+
+			setPlid: function(plid) {
+				var instance = this;
+
+				instance.reservedParams.p_l_id =  plid;
+
+				return instance;
+			},
+
+			/*
+			 * @deprecated
+			 */
+			setPortletConfiguration: function() {
+				var instance = this;
+
+				return instance;
+			},
+
+			setPortletId: function(portletId) {
+				var instance = this;
+
+				instance.reservedParams.p_p_id = portletId;
+
+				return instance;
+			},
+
+			setPortletMode: function(portletMode) {
+				var instance = this;
+
+				instance.reservedParams.p_p_mode = portletMode;
+
+				return instance;
+			},
+
+			setResourceId: function(resourceId) {
+				var instance = this;
+
+				instance.reservedParams.p_p_resource_id = resourceId;
+
+				return instance;
+			},
+
+			setSecure: function(secure) {
+				var instance = this;
+
+				instance.options.secure = secure;
+
+				return instance;
+			},
+
+			setWindowState: function(windowState) {
+				var instance = this;
+
+				instance.reservedParams.p_p_state = windowState;
+
+				return instance;
+			},
+
+			toString: function() {
+				var instance = this;
+
+				var options = instance.options;
+
+				var reservedParams = instance.reservedParams;
+
+				var resultURL = new A.Url(options.basePortletURL);
+
+				var portletId = reservedParams.p_p_id;
+
+				if (!portletId) {
+					portletId = resultURL.getParameter('p_p_id');
+				}
+
+				var namespacePrefix = Util.getPortletNamespace(portletId);
+
+				A.each(
+					reservedParams,
+					function(item, index, collection) {
+						if (Lang.isValue(item)) {
+							resultURL.setParameter(index, item);
+						}
+					}
+				);
+
+				A.each(
+					instance.params,
+					function(item, index, collection) {
+						if (Lang.isValue(item)) {
+							resultURL.setParameter(namespacePrefix + index, item);
+						}
+					}
+				);
+
+				if (options.secure) {
+					resultURL.setProtocol('https');
+				}
+
+				var value = resultURL.toString();
+
+				if (options.escapeXML) {
+					value = Util.escapeHTML(value);
+				}
+
+				return value;
+			},
+
+			_isReservedParam: function(paramName) {
+				var instance = this;
+
+				var result = false;
+
+				A.each(
+					instance.reservedParams,
+					function(item, index, collection) {
+						if (index === paramName) {
+							result = true;
+						}
+					}
+				);
+
+				return result;
+			}
+		};
+
+		A.mix(
+			PortletURL,
+			{
+				ACTION_PHASE: '1',
+
+				RENDER_PHASE: '0',
+
+				RESOURCE_PHASE: '2',
+
+				createActionURL: function() {
+					return new PortletURL(PortletURL.ACTION_PHASE);
+				},
+
+				createPermissionURL: function(portletResource, modelResource, modelResourceDescription, resourcePrimKey) {
+					var redirect = location.href;
+
+					var portletURL = PortletURL.createRenderURL();
+
+					portletURL.setDoAsGroupId(themeDisplay.getScopeGroupId());
+					portletURL.setParameter('struts_action', '/portlet_configuration/edit_permissions');
+					portletURL.setParameter('redirect', redirect);
+
+					if (!themeDisplay.isStateMaximized()) {
+						portletURL.setParameter('returnToFullPageURL', redirect);
+					}
+
+					portletURL.setParameter('portletResource', portletResource);
+					portletURL.setParameter('modelResource', modelResource);
+					portletURL.setParameter('modelResourceDescription', modelResourceDescription);
+					portletURL.setParameter('resourcePrimKey', resourcePrimKey);
+					portletURL.setPortletId(86);
+					portletURL.setWindowState('MAXIMIZED');
+
+					return portletURL;
+				},
+
+				createRenderURL: function() {
+					return new PortletURL(PortletURL.RENDER_PHASE);
+				},
+
+				createResourceURL: function() {
+					return new PortletURL(PortletURL.RESOURCE_PHASE);
+				},
+
+				createURL: function(basePortletURL, params) {
+					return new PortletURL(null, params, basePortletURL);
+				}
+			}
+		);
+
+		Liferay.PortletURL = PortletURL;
+	},
+	'',
+	{
+		requires: ['aui-base', 'aui-io-request', 'aui-url', 'querystring-stringify-simple']
+	}
+);YUI.add("aui-loading-mask-deprecated",function(e,t){var n=e.Lang,r="boundingBox",i="contentBox",s="hide",o="host",u="messageEl",t="loadingmask",a="position",f="show",l="static",c="strings",h="target",p="toggle",d=e.getClassName,v=d(t),m=d(t,"masked"),g=d(t,"masked","relative"),y=d(t,"message"),b=d(t,"message","content"),w='<div class="'+y+'"><div class="'+b+'">{0}</div></div>',E=e.Component.create({NAME:t,NS:t,ATTRS:{messageEl:{valueFn:function(t){var r=this,i=r.get(c);return e.Node.create(n.sub(w,[i.loading]))}},strings:{value:{loading:"Loading&hellip;"}},target:{setter:function(){var t=this,n=t.get(o);return n instanceof e.Widget&&(n=n.get(i)),n},value:null}},EXTENDS:e.Plugin.Base,prototype:{initializer:function(t){var n=this;n.IGNORED_ATTRS=e.merge({host:!0},E.ATTRS),n.renderUI(),n.bindUI(),n._createDynamicAttrs(t)},renderUI:function(){var e=this,t=e.get(c);e._renderOverlayMask(),e.overlayMask.get(r).append(e.get(u))},bindUI:function(){var e=this;e._bindOverlayMaskUI()},_bindOverlayMaskUI:function(){var e=this;e.overlayMask.after("visibleChange",e._afterVisibleChange,e)},centerMessage:function(){var e=this;e.get(u).center(e.overlayMask.get(r))},refreshMask:function(){var e=this;e.overlayMask.refreshMask(),e.centerMessage()},_afterVisibleChange:function(e){var t=this,n=t.get(h),r=n.getStyle(a)==l;n.toggleClass(m,e.newVal),n.toggleClass(g,e.newVal&&r),e.newVal&&t.refreshMask()},_renderOverlayMask:function(){var t=this,n=t.get(h);t.overlayMask=(new e.OverlayMask({target:n,cssClass:v})).render(n)},_createDynamicAttrs:function(t){var n=this;e.each(t,function(e,t){var r=n.IGNORED_ATTRS[t];r||n.addAttr(t,{setter:function(e){return this.overlayMask.set(t,e),e},value:e})})}}});e.each([s,f,p],function(e){E.prototype[e]=function(){this.overlayMask[e]()}}),e.LoadingMask=E},"2.0.0",{requires:["plugin","aui-overlay-mask-deprecated"],skinnable:!0});YUI.add("aui-dialog-iframe-deprecated",function(e,t){var n=e.Lang,r=n.isFunction,i=e.getClassName,s="iframe",o="bindLoadHandler",u="bodyContent",a="closeOnEscape",f="contentWindow",l="detach",c="document",h="documentElement",p="gutter",d="host",v="iframeCssClass",m="iframeId",g="key",y="load",b="offsetHeight",w="offsetWidth",E="paddingBottom",S="paddingLeft",x="paddingRight",T="paddingTop",N="renderUI",C="rendered",k="src",L="unload",A="uri",O="uriChange",M="visibleChange",_=i("dialog",s,"bd"),D=i("dialog",s,"node"),P=i("dialog",s,"root","node"),H=[D],B='<iframe class="{cssClass}" frameborder="0" id="{id}" name="{id}" src="{uri}"></iframe>',j=e.Widget.UI_SRC,F={src:j},I=e.Component.create({ATTRS:{bindLoadHandler:{validator:r,value:function(){var t=this;t.node.on("load",e.bind(t.fire,t,"load"))}},closeOnEscape:{validator:n.isBoolean,value:!0},gutter:{setter:"_setGutter",valueFn:"_gutterValueFn"},iframeCssClass:{value:"",setter:"_setIframeCssClass"},iframeId:{valueFn:function(){var t=this;return t.get("id")||e.guid()}},uri:{}},EXTENDS:e.Plugin.Base,NAME:s,NS:s,prototype:{initializer:function(){var t=this;t._host=t.get(d),t._eventHandles=[],t.publish(y,{defaultFn:t._defaultLoadIframeFn}),t._host.get(C)?t._initializeIframe():t.afterHostMethod(N,e.debounce(t._afterRenderUI,50,t),t),t.afterHostMethod("_uiSetVisible",e.bind(t._afterHostUISetVisible,t),t),t.afterHostMethod("_fillHeight",e.bind(t._setNodeDimensions,t),t),t.afterHostMethod("_uiSetWidth",e.bind(t._setNodeDimensions,t),t),t.after(a+"Change",t._uiSetCloseOnEscape,t)},destructor:function(){var e=this;e._detachEventHandles(),e._host.set(u,e._previousBodyContent),e.node.remove(!0)},_afterHostUISetVisible:function(e){var t=this;e&&t._host._fillHeight()},_afterRenderUI:function(){var e=this;e._initializeIframe()},_afterUriChange:function(e){var t=this;e.src!==j&&t._uiSetUri(e.newVal,e.prevVal)},_bindEvents:function(){var t=this;t.afterHostEvent(M,t._afterDialogVisibleChange),t.after(O,t._afterUriChange),t.node.on(y,e.bind(t._onLoadIframe,t));var n=t.get(o);n.call(t)},_detachEventHandles:function(){var t=this,n=t._eventHandles;e.Array.invoke(n,l),t._eventCloseOnEscapeHandle&&t._eventCloseOnEscapeHandle.detach(),n.length=0},_defaultLoadIframeFn:function(){var e=this,t=e.node;try{var n=t.get(f);n.once(L,e._detachEventHandles,e);var r=n.get(c);r.get(h).addClass(P),e.set(A,r.get("location.href"),F),e._uiSetCloseOnEscape()}catch(i){}e._bodyNode.loadingmask.hide(),e._host._syncUIPosAlign()},_gutterValueFn:function(){return function(){var e=this,t=e._host.bodyNode;return{bottom:t.getStyle(E),left:t.getStyle(S),right:t.getStyle(x),top:t.getStyle(T)}}},_initializeIframe:function(){var t=this;t._plugIframe(),t._bindEvents();var n=t._bodyNode;n.plug(e.LoadingMask);var r=n.loadingmask;r.overlayMask.after(M,t._afterMaskVisibleChange,t),r.show()},_onLoadIframe:function(){var e=this;e._setIframeContentGutter(),e._setNodeDimensions()},_plugIframe:function(){var t=this,r=n.sub(B,{cssClass:t.get(v),id:t.get(m),uri:t.get(A)}),i=t._host.bodyNode,s=e.Node.create(r);t._host.set(u,s),i.addClass(_),t._bodyNode=i,t.node=s},_setGutter:function(e){var t=this;return r(e)&&(e=e.call(t)),e},_setIframeContentGutter:function(){var e=this,t=e._host.bodyNode,n=e.get(p),r=e.node.get(f),i=r.get(c);i.get(h).setStyles({paddingBottom:n.bottom,paddingLeft:n.left,paddingRight:n.right,paddingTop:n.top}),t.setStyles({height:t.get(b),padding:"0"})},_setIframeCssClass:function(e){return H[1]=e,H.join(" ")},_setNodeDimensions:function(){var e=this,t=e._host.bodyNode,n=e.node;t&&n&&n.setStyles({height:t.get(b),width:t.get(w)})},_uiSetCloseOnEscape:function(){var t=this;if(t.get(a)){if(!t._eventCloseOnEscapeHandle)try{var n=t.node.get(f),r=n.get(c);t._eventCloseOnEscapeHandle=e.on(g,function(){t._host.hide()},[r],"down:27")}catch(i){}}else t._eventCloseOnEscapeHandle&&(t._eventCloseOnEscapeHandle.detach(),t._eventCloseOnEscapeHandle=null)},_uiSetUri:function(e,t){var n=this,r=n._bodyNode.loadingmask,i=t.split("#"),s=e.split("#");s[0]!==i[0]&&r&&r.show(),n.node.attr(k,e)}}});e.Plugin.DialogIframe=I},"2.0.0",{requires:["plugin","aui-base-deprecated","aui-loading-mask-deprecated"],skinnable:!0});AUI.add(
+	'liferay-widget-zindex',
+	function(A) {
+		var Lang = A.Lang;
+
+		var STR_HOST = 'host';
+
+		var WidgetZIndex = A.Component.create(
+			{
+				EXTENDS: A.Plugin.Base,
+
+				NAME: 'widgetzindex',
+
+				NS: 'zindex',
+
+				prototype: {
+					initializer: function() {
+						var instance = this;
+
+						var host = instance.get(STR_HOST);
+
+						if (!host.get('rendered') && host.get('visible')) {
+							instance._setHostZIndex();
+						}
+
+						instance.onHostEvent(
+							'visibleChange',
+							function(event) {
+								if (event.newVal) {
+									instance._setHostZIndex();
+								}
+							}
+						);
+					},
+
+					_setHostZIndex: function() {
+						var instance = this;
+
+						instance.get(STR_HOST).set('zIndex', ++Liferay.zIndex.WINDOW);
+					}
+				}
+			}
+		);
+
+		Liferay.WidgetZIndex = WidgetZIndex;
+	},
+	'',
+	{
+		requires: ['aui-modal', 'plugin']
+	}
+);AUI.add(
+	'liferay-util-window',
+	function(A) {
+		var Lang = A.Lang;
+
+		var DOM = A.DOM;
+
+		var Util = Liferay.Util;
+		var Window = Util.Window;
+
+		var LiferayModal = A.Component.create(
+			{
+				ATTRS: {
+					autoHeight: {
+						value: false
+					},
+
+					autoHeightRatio: {
+						value: 0.95
+					},
+
+					autoSizeNode: {
+						setter: A.one
+					},
+
+					autoWidth: {
+						value: false
+					},
+
+					autoWidthRatio: {
+						value: 0.95
+					}
+				},
+
+				EXTENDS: A.Modal,
+
+				NAME: A.Modal.NAME,
+
+				prototype: {
+				}
+			}
+		);
+
+		A.mix(
+			Window,
+			{
+				DEFAULTS: {
+					centered: true,
+					headerContent: '&nbsp;',
+					modal: true,
+					visible: true,
+					zIndex: Liferay.zIndex.WINDOW
+				},
+
+				IFRAME_SUFFIX: '_iframe_',
+
+				TITLE_TEMPLATE: '<h3 />',
+
+				_winResizeHandler: null,
+
+				getByChild: function(child) {
+					var instance = this;
+
+					var node = A.one(child).ancestor('.modal', true);
+
+					return A.Widget.getByNode(node);
+				},
+
+				getById: function(id) {
+					var instance = this;
+
+					return instance._map[id];
+				},
+
+				getWindow: function(config) {
+					var instance = this;
+
+					instance._ensureDefaultId(config);
+
+					var modal = instance._getWindow(config);
+
+					instance._bindDOMWinResizeIfNeeded();
+
+					modal.render();
+
+					instance._setWindowDefaultSizeIfNeeded(modal);
+
+					modal.align();
+
+					return modal;
+				},
+
+				hideByChild: function(child) {
+					var instance = this;
+
+					return instance.getByChild(child).hide();
+				},
+
+				refreshByChild: function(child) {
+					var instance = this;
+
+					var dialog = instance.getByChild(child);
+
+					if (dialog && dialog.io) {
+						dialog.io.start();
+					}
+				},
+
+				_bindDOMWinResizeIfNeeded: function() {
+					var instance = this;
+
+					if (!instance._winResizeHandler) {
+						instance._winResizeHandler = A.getWin().after('windowresize', instance._syncWindowsUI, instance);
+					}
+				},
+
+				_bindWindowHooks: function(modal, config) {
+					var instance = this;
+
+					var id = modal.get('id');
+
+					var openingWindow = config.openingWindow;
+
+					var refreshWindow = config.refreshWindow;
+
+					modal._opener = openingWindow;
+					modal._refreshWindow = refreshWindow;
+
+					modal.after(
+						'destroy',
+						function(event) {
+							instance._unregister(modal);
+
+							modal = null;
+						}
+					);
+
+					var liferayHandles = modal._liferayHandles;
+
+					liferayHandles.push(
+						Liferay.after(
+							'hashChange',
+							function(event) {
+								modal.iframe.set('uri', event.uri);
+							}
+						)
+					);
+
+					liferayHandles.push(
+						Liferay.after(
+							'popupReady',
+							function(event) {
+								var iframeId = id + instance.IFRAME_SUFFIX;
+
+								if (event.windowName === iframeId) {
+									event.dialog = modal;
+									event.details[0].dialog = modal;
+
+									if (event.doc) {
+										Util.afterIframeLoaded(event);
+
+										var modalUtil = event.win.Liferay.Util;
+
+										modalUtil.Window._opener = modal._opener;
+
+										modalUtil.Window._name = id;
+									}
+
+									modal.iframe.node.focus();
+								}
+							}
+						)
+					);
+				},
+
+				_ensureDefaultId: function(config) {
+					var instance = this;
+
+					if (!Lang.isValue(config.id)) {
+						config.id = A.guid();
+					}
+
+					if (!config.iframeId) {
+						config.iframeId = config.id + instance.IFRAME_SUFFIX;
+					}
+				},
+
+				_getWindow: function(config) {
+					var instance = this;
+
+					var id = config.id;
+
+					var modalConfig = instance._getWindowConfig(config);
+
+					var dialogIframeConfig = instance._getDialogIframeConfig(config);
+
+					var modal = instance.getById(id);
+
+					if (!modal) {
+						var titleNode = A.Node.create(instance.TITLE_TEMPLATE);
+
+						if (config.stack !== false) {
+							A.mix(
+								modalConfig,
+								{
+									plugins: [Liferay.WidgetZIndex]
+								}
+							);
+						}
+
+						modal = new LiferayModal(
+							A.merge(
+								{
+									headerContent: titleNode,
+									id: id
+								},
+								modalConfig
+							)
+						);
+
+						modal.titleNode = titleNode;
+
+						instance._register(modal);
+
+						instance._bindWindowHooks(modal, config);
+					}
+					else {
+						if (!config.zIndex && modal.hasPlugin('zindex')) {
+							delete modalConfig.zIndex;
+						}
+
+						var openingWindow = config.openingWindow;
+
+						modal._opener = openingWindow;
+						modal._refreshWindow = config.refreshWindow;
+
+						instance._map[id]._opener = openingWindow;
+
+						modal.setAttrs(modalConfig);
+					}
+
+					if (dialogIframeConfig) {
+						modal.plug(A.Plugin.DialogIframe, dialogIframeConfig);
+
+						modal.get('boundingBox').addClass('dialog-iframe-modal');
+					}
+
+					if (!Lang.isValue(config.title)) {
+						config.title = instance.DEFAULTS.headerContent;
+					}
+
+					modal.titleNode.html(config.title);
+
+					modal.fillHeight(modal.bodyNode);
+
+					return modal;
+				},
+
+				_getWindowConfig: function(config) {
+					var instance = this;
+
+					var modalConfig = A.merge(instance.DEFAULTS, config.dialog);
+
+					var height = modalConfig.height;
+
+					var width = modalConfig.width;
+
+					if (height === 'auto' || height === '' || height === undefined || height > DOM.winHeight()) {
+						modalConfig.autoHeight = true;
+					}
+
+					if (width === 'auto' || width === '' || width === undefined || width > DOM.winWidth()) {
+						modalConfig.autoWidth = true;
+					}
+
+					modalConfig.id = config.id;
+
+					delete modalConfig.headerContent;
+
+					return modalConfig;
+				},
+
+				_getDialogIframeConfig: function(config) {
+					var instance = this;
+
+					var dialogIframeConfig;
+
+					var iframeId = config.iframeId;
+
+					var uri = config.uri;
+
+					if (uri) {
+						if (config.cache === false) {
+							uri = Liferay.Util.addParams(A.guid() + '=' + Lang.now(), uri);
+						}
+
+						dialogIframeConfig = A.merge(
+							config.dialogIframe,
+							{
+								bindLoadHandler: function() {
+									var instance = this;
+
+									var modal = instance.get('host');
+
+									var popupReady = false;
+
+									var liferayHandles = modal._liferayHandles;
+
+									liferayHandles.push(
+										Liferay.on(
+											'popupReady',
+											function(event) {
+												instance.fire('load', event);
+
+												popupReady = true;
+											}
+										)
+									);
+
+									liferayHandles.push(
+										instance.node.on(
+											'load',
+											function(event) {
+												if (!popupReady) {
+													Liferay.fire(
+														'popupReady',
+														{
+															windowName: iframeId
+														}
+													);
+												}
+
+												popupReady = false;
+											}
+										)
+									);
+								},
+
+								iframeId: iframeId,
+								uri: uri
+							}
+						);
+					}
+
+					return dialogIframeConfig;
+				},
+
+				_register: function(modal) {
+					var instance = this;
+
+					var id = modal.get('id');
+
+					modal._liferayHandles = [];
+
+					instance._map[id] = modal;
+					instance._map[id + instance.IFRAME_SUFFIX] = modal;
+				},
+
+				_setWindowDefaultSizeIfNeeded: function(modal) {
+					var instance = this;
+
+					var autoSizeNode = modal.get('autoSizeNode');
+
+					if (modal.get('autoHeight')) {
+						var height;
+
+						if (autoSizeNode) {
+							height = autoSizeNode.get('offsetHeight');
+						}
+						else {
+							height = DOM.winHeight();
+						}
+
+						height *= modal.get('autoHeightRatio');
+
+						modal.set('height', height);
+					}
+
+					if (modal.get('autoWidth')) {
+						var width;
+
+						if (autoSizeNode) {
+							width = autoSizeNode.get('offsetWidth');
+						}
+						else {
+							width = DOM.winWidth();
+						}
+
+						width *= modal.get('autoWidthRatio');
+
+						modal.set('width', width);
+					}
+				},
+
+				_syncWindowsUI: function() {
+					var instance = this;
+
+					var modals = instance._map;
+
+					A.each(
+						modals,
+						function(modal) {
+							if (modal.get('visible')) {
+								instance._setWindowDefaultSizeIfNeeded(modal);
+
+								modal.align();
+							}
+						}
+					);
+				},
+
+				_unregister: function(modal) {
+					var instance = this;
+
+					var id = modal.get('id');
+
+					delete instance._map[id];
+					delete instance._map[id + instance.IFRAME_SUFFIX];
+
+					A.Array.invoke(modal._liferayHandles, 'detach');
+				}
+			}
+		);
+	},
+	'',
+	{
+		requires: ['aui-dialog-iframe-deprecated', 'aui-modal', 'event-resize', 'liferay-widget-zindex']
+	}
+);AUI.add(
+	'liferay-sign-in-modal',
+	function(A) {
+		var	NAME = 'signinmodal';
+
+		var WIN = A.config.win;
+
+		var SignInModal = A.Component.create(
+			{
+				ATTRS: {
+					resetFormValidator: {
+						value: true
+					},
+
+					signInPortlet: {
+						setter: A.one,
+						value: '#p_p_id_58_'
+					}
+				},
+
+				EXTENDS: A.Plugin.Base,
+
+				NAME: NAME,
+
+				NS: NAME,
+
+				prototype: {
+					initializer: function(config) {
+						var instance = this;
+
+						var signInPortlet = instance.get('signInPortlet');
+
+						if (signInPortlet) {
+							instance._signInPortletBody = signInPortlet.one('.portlet-body');
+						}
+
+						var host = instance.get('host');
+
+						instance._host = host;
+						instance._signInPortlet = signInPortlet;
+
+						instance._signInURL = host.attr('href');
+
+						if (signInPortlet) {
+							var formNode = signInPortlet.one('form');
+
+							if (formNode) {
+								instance._signInFormId = formNode.attr('id');
+
+								var form = Liferay.Form.get(instance._signInFormId);
+
+								instance._formValidator = form.formValidator;
+
+								instance._hasSignInForm = formNode.hasClass('sign-in-form');
+							}
+						}
+
+						instance._bindUI();
+					},
+
+					_bindUI: function() {
+						var instance = this;
+
+						instance._host.on('click', A.bind('_load', instance));
+					},
+
+					_load: function(event) {
+						var instance = this;
+
+						event.preventDefault();
+
+						if (instance._hasSignInForm && instance._signInFormId && instance._signInPortletBody) {
+							instance._loadDOM();
+						}
+						else {
+							instance._loadIO();
+						}
+					},
+
+					_loadDOM: function() {
+						var instance = this;
+
+						var signInPortletBody = instance._signInPortletBody;
+
+						if (!instance._originalParentNode) {
+							instance._originalParentNode = signInPortletBody.ancestor();
+						}
+
+						instance._setModalContent(signInPortletBody);
+
+						Liferay.Util.focusFormField('input:text');
+
+						Liferay.fire(instance._signInFormId + 'formReady');
+					},
+
+					_loadIO: function() {
+						var instance = this;
+
+						var modalSignInURL = Liferay.Util.addParams('windowState=exclusive', instance._signInURL);
+
+						A.io.request(
+							modalSignInURL,
+							{
+								on: {
+									failure: A.bind('_redirectPage', instance),
+									success: function(event, id, obj) {
+										var responseData = this.get('responseData');
+
+										if (responseData) {
+											instance._setModalContent(responseData);
+										}
+										else {
+											instance._redirectPage();
+										}
+									}
+								}
+							}
+						);
+					},
+
+					_redirectPage: function() {
+						var instance = this;
+
+						WIN.location.href = instance._signInURL;
+					},
+
+					_setModalContent: function(content) {
+						var instance = this;
+
+						var dialog = Liferay.Util.getWindow(NAME);
+
+						if (!dialog) {
+							Liferay.Util.openWindow(
+								{
+									dialog: {
+										after: {
+											visibleChange: function(event) {
+												var signInPortletBody = instance._signInPortletBody;
+
+												var formValidator = instance._formValidator;
+
+												if (formValidator && instance.get('resetFormValidator')) {
+													formValidator.resetAllFields();
+												}
+
+												if (!event.newVal && signInPortletBody) {
+													var originalParentNode = instance._originalParentNode;
+
+													if (originalParentNode) {
+														originalParentNode.append(signInPortletBody);
+													}
+												}
+											}
+										},
+										height: 430,
+										width: 560
+									},
+									id: NAME,
+									title: '\u0042\u0065\u006a\u0065\u006c\u0065\u006e\u0074\u006b\u0065\u007a\u00e9\u0073'
+								},
+								function(dialogWindow) {
+									var bodyNode = dialogWindow.bodyNode;
+
+									bodyNode.plug(A.Plugin.ParseContent);
+
+									bodyNode.setContent(content);
+								}
+							);
+						}
+						else {
+							dialog.bodyNode.setContent(content);
+
+							dialog.show();
+						}
+					}
+				}
+			}
+		);
+
+		Liferay.SignInModal = SignInModal;
+	},
+	'',
+	{
+		requires: ['aui-base', 'aui-component', 'aui-io-request', 'aui-parse-content', 'liferay-form', 'liferay-portlet-url', 'liferay-util-window', 'plugin']
+	}
+);

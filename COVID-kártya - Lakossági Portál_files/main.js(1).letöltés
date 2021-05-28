@@ -1,0 +1,21 @@
+/**
+ * Kikeresi a Component Bus -ról az adott azonosítójú komponenst.
+ * 
+ * @param componentId Komponens azonosító
+ */
+function _T(componentId, Y) {
+	var result;
+	var component;
+	if (Y != null) {
+		component = Y.ComponentBus.getComponent(componentId);
+	}
+	else {
+		YUI().use('component-bus', function(Y) {
+			component = Y.ComponentBus.getComponent(componentId);
+		});
+	}
+	if (component) {
+		result = component.obj;
+	}
+	return result;
+}

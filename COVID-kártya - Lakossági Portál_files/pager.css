@@ -1,0 +1,39 @@
+.df_pagination li {
+	padding: 5px;
+	line-height: 1.42857143;
+	color: #428bca;
+	background-color: #fff;
+	border: 1px solid #ddd;
+	width: 25px;
+}
+
+.df_pagination li:hover {
+	cursor: pointer;
+	background-color: #ddd;
+}
+
+.df_pagination_active {
+	background-color: #3DAA62 !important;
+	color: white !important;
+}
+
+.df_pagination_disabled {
+	color: gray !important;
+}
+
+.df_pagination_disabled:hover {
+	cursor: not-allowed !important;
+	background-color: white !important;
+}
+
+.df_pagination_dots {
+	border: none !important;
+	color: black !important;
+	background: none !important;
+	padding-right: 10px !important;
+	padding-left: 10px !important;
+}
+
+.df_pagination_dots:hover {
+	cursor: default !important;
+}
